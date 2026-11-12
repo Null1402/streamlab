@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iniciar sesión · StreamLab</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .form-page { margin-top: var(--bar-h); }
+
+    .form-sub {
+      margin-top: -.5rem;
+      font-size: .88rem;
+      color: var(--muted);
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: .6rem .5rem;
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+
+    .form-hint {
+      font-size: .78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .btn-block { width: 100%; }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar"></header>
+
+  <main class="form-page">
+    <div class="form-card">
+      <h1>StreamLab</h1>
+      <p class="form-sub" id="form-sub"></p>
+
+      <div class="tabs" role="tablist" aria-label="Acceso a StreamLab">
+        <button type="button" class="tab" role="tab" id="tab-login"
+                aria-controls="auth-form" aria-selected="true">Iniciar sesión</button>
+        <button type="button" class="tab" role="tab" id="tab-register"
+                aria-controls="auth-form" aria-selected="false" tabindex="-1">Registrarse</button>
+      </div>
+
+      <form class="auth-form" id="auth-form" role="tabpanel" aria-labelledby="tab-login" novalidate>
+        <div class="form-group">
+          <label for="username">Usuario</label>
+          <input class="form-control" id="username" name="username" type="text"
+                 autocomplete="username" autocapitalize="none" spellcheck="false"
+                 maxlength="20" required autofocus>
+          <p class="form-hint" id="username-hint" hidden>
+            De 3 a 20 caracteres: minúsculas, números y guion bajo (_).
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input class="form-control" id="password" name="password" type="password"
+                 autocomplete="current-password" required>
+          <p class="form-hint" id="password-hint" hidden>Mínimo 6 caracteres.</p>
+        </div>
+
+        <p class="form-error" id="form-error" role="alert" aria-live="polite"></p>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submit-btn">Iniciar sesión</button>
+      </form>
+    </div>
+  </main>
+
+  <script src="/common.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const USER_RE = /^[a-z0-9_]{3,20}$/;
+      const MIN_PASSWORD = 6;
+
+      const COPY = {
+        login: {
+          title: 'Iniciar sesión · StreamLab',
+          sub: 'Entra para chatear, seguir canales y transmitir.',
+          submit: 'Iniciar sesión',
+          busy: 'Entrando…',
+          autocomplete: 'current-password'
+        },
+        register: {
+          title: 'Registrarse · StreamLab',
+          sub: 'Crea tu cuenta para chatear, seguir canales y transmitir.',
+          submit: 'Crear cuenta',
+          busy: 'Creando cuenta…',
+          autocomplete: 'new-password'
+        }
+      };
+
+      const form        = document.getElementById('auth-form');
+      const tabLogin    = document.getElementById('tab-login');
+      const tabRegister = document.getElementById('tab-register');
+      const subEl       = document.getElementById('form-sub');
+      const userInput   = document.getElementById('username');
+      const passInput   = document.getElementById('password');
+      const userHint    = document.getElementById('username-hint');
+      const passHint    = document.getElementById('password-hint');
+      const errorEl     = document.getElementById('form-error');
+      const submitBtn   = document.getElementById('submit-btn');
+
+      let mode = 'login';
+      let busy = false;
+
+      function setError(msg) {
+        errorEl.textContent = msg || '';
+      }
+
+      function showError(msg, field) {
+        setError(msg);
+        if (field) field.focus();
+      }
+
+      function setBusy(value) {
+        busy = value;
+        submitBtn.disabled = value;
+        submitBtn.textContent = value ? COPY[mode].busy : COPY[mode].submit;
+      }
+
+      function setMode(next, syncHash) {
+        mode = next;
+        const c = COPY[mode];
+        const isRegister = mode === 'register';
+
+        tabLogin.setAttribute('aria-selected', String(!isRegister));
+        tabRegister.setAttribute('aria-selected', String(isRegister));
+        tabLogin.tabIndex = isRegister ? -1 : 0;
+        tabRegister.tabIndex = isRegister ? 0 : -1;
+        form.setAttribute('aria-labelledby', isRegister ? 'tab-register' : 'tab-login');
+
+        subEl.textContent = c.sub;
+        submitBtn.textContent = c.submit;
+        passInput.autocomplete = c.autocomplete;
+        userHint.hidden = !isRegister;
+        passHint.hidden = !isRegister;
+        document.title = c.title;
+        setError('');
+
+        if (syncHash) {
+          history.replaceState(null, '', isRegister ? '#register' : location.pathname + location.search);
+        }
+      }
+
+      /* ── Pestañas ─────────────────────────────────────────────────────────── */
+      tabLogin.addEventListener('click', () => { if (!busy) setMode('login', true); });
+      tabRegister.addEventListener('click', () => { if (!busy) setMode('register', true); });
+
+      document.querySelector('.tabs').addEventListener('keydown', (e) => {
+        if (busy || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        const next = (e.key === 'ArrowLeft' || e.key === 'Home') ? 'login' : 'register';
+        setMode(next, true);
+        (next === 'login' ? tabLogin : tabRegister).focus();
+      });
+
+      // #register abre la segunda pestaña (también desde el enlace "Registrarse" de la barra superior)
+      window.addEventListener('hashchange', () => {
+        if (!busy) setMode(location.hash === '#register' ? 'register' : 'login', false);
+      });
+
+      /* ── Envío del formulario ─────────────────────────────────────────────── */
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (busy) return;
+
+        const username = userInput.value.trim().toLowerCase();
+        const password = passInput.value;
+
+        if (mode === 'register') {
+          if (!USER_RE.test(username)) {
+            return showError('El usuario debe tener de 3 a 20 caracteres: solo minúsculas, números y guion bajo (_).', userInput);
+          }
+          if (password.length < MIN_PASSWORD) {
+            return showError('La contraseña debe tener al menos 6 caracteres.', passInput);
+          }
+        } else if (!username || !password) {
+          return showError('Escribe tu usuario y tu contraseña.', username ? passInput : userInput);
+        }
+
+        setError('');
+        setBusy(true);
+
+        try {
+          await api(mode === 'register' ? '/api/register' : '/api/login', {
+            method: 'POST',
+            body: { username, password }
+          });
+          window.location.href = mode === 'register' ? '/dashboard.html' : '/index.html';
+        } catch (err) {
+          setError(err.status ? err.message : 'No se pudo conectar con el servidor. Inténtalo de nuevo.');
+          setBusy(false);
+        }
+      });
+
+      // Al volver con "atrás" desde la caché, el botón no debe quedar bloqueado
+      window.addEventListener('pageshow', (e) => { if (e.persisted) setBusy(false); });
+
+      /* ── Arranque ─────────────────────────────────────────────────────────── */
+      setMode(location.hash === '#register' ? 'register' : 'login', false);
+
+      // Barra superior; si ya hay sesión no tiene sentido mostrar el formulario
+      renderTopbar('').then((me) => {
+        if (me) window.location.replace('/index.html');
+      });
+    })();
+  </script>
+</body>
+</html>

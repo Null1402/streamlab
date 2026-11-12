@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamLab — Explorar</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <header id="topbar" class="topbar"></header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main">
+      <div class="chips" id="chips"></div>
+      <p class="section-title" id="section-title">Canales</p>
+      <div class="grid" id="grid"></div>
+    </main>
+  </div>
+
+  <div id="toast-wrap" class="toast-wrap"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/common.js"></script>
+  <script>
+    const params   = new URLSearchParams(location.search);
+    let activeCategory = params.get('category') || '';
+    let activeTab      = params.get('tab') || 'explore';
+
+    /* ── Chips ─────────────────────────────────────────────────────────────── */
+    async function renderChips() {
+      const el = document.getElementById('chips');
+      let cats = [];
+      try { cats = await api('/api/categories'); } catch (_) {}
+
+      const allActive   = !activeCategory && activeTab === 'explore';
+      const followActive = activeTab === 'following';
+
+      el.innerHTML = `
+        <button class="chip ${allActive ? 'active' : ''}" data-cat="" data-tab="explore">
+          Todo
+        </button>
+        ${cats.map(c => `
+          <button class="chip ${activeTab === 'explore' && activeCategory === c.name ? 'active' : ''}"
+                  data-cat="${esc(c.name)}" data-tab="explore">
+            ${esc(c.name)}
+            ${c.live ? `<span class="chip__count">${esc(String(c.live))}</span>` : ''}
+          </button>
+        `).join('')}
+        <button class="chip ${followActive ? 'active' : ''}" data-cat="" data-tab="following">
+          Siguiendo
+        </button>
+      `;
+
+      el.querySelectorAll('.chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          activeCategory = btn.dataset.cat;
+          activeTab      = btn.dataset.tab;
+          const url = new URL(location.href);
+          url.searchParams.set('tab', activeTab);
+          if (activeCategory) url.searchParams.set('category', activeCategory);
+          else url.searchParams.delete('category');
+          history.replaceState(null, '', url);
+          renderGrid();
+          renderChips();
+        });
+      });
+    }
+
+    /* ── Grid ──────────────────────────────────────────────────────────────── */
+    async function renderGrid() {
+      const grid  = document.getElementById('grid');
+      const title = document.getElementById('section-title');
+      grid.innerHTML = `<p class="empty-state"><span class="empty-state__icon">⏳</span><br>Cargando…</p>`;
+
+      try {
+        let channels;
+        if (activeTab === 'following') {
+          title.textContent = 'Canales que sigues';
+          channels = await api('/api/following');
+        } else {
+          title.textContent = activeCategory
+            ? `${activeCategory} — En vivo y offline`
+            : 'Todos los canales';
+          const qs = new URLSearchParams();
+          if (activeCategory) qs.set('category', activeCategory);
+          channels = await api('/api/channels?' + qs);
+        }
+
+        if (!channels.length) {
+          grid.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+              <div class="empty-state__icon">📭</div>
+              <p>${activeTab === 'following' ? 'Aún no sigues ningún canal.' : 'No hay canales en esta categoría.'}</p>
+            </div>`;
+          return;
+        }
+
+        grid.innerHTML = channels.map(cardHTML).join('');
+      } catch (e) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <div class="empty-state__icon">⚠️</div>
+            <p>${esc(e.message)}</p>
+          </div>`;
+      }
+    }
+
+    /* ── Socket — recarga al cambiar estado en vivo ─────────────────────────── */
+    const socket = io();
+    socket.on('live', () => {
+      renderGrid();
+      renderChips();
+      renderSidebar(document.getElementById('sidebar'));
+    });
+
+    /* ── Init ──────────────────────────────────────────────────────────────── */
+    (async () => {
+      await renderTopbar('explore');
+      await renderSidebar(document.getElementById('sidebar'));
+      await renderChips();
+      await renderGrid();
+    })();
+  </script>
+</body>
+</html>
